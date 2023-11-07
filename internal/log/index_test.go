@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
 
 func TestIndex(t *testing.T) {
@@ -52,7 +54,7 @@ func TestIndex(t *testing.T) {
 			t.Errorf("read entry from index: %s", err)
 		}
 
-		assertEqual(t, want.Pos, pos)
+		testhelper.AssertEqual(t, want.Pos, pos)
 	}
 
 	_, _, err = idx.Read(int64(len(entries)))
@@ -71,6 +73,6 @@ func TestIndex(t *testing.T) {
 	if err != nil {
 		t.Errorf("read last index entry: %s", err)
 	}
-	assertEqual(t, entries[len(entries)-1].Off, off)
-	assertEqual(t, entries[len(entries)-1].Pos, pos)
+	testhelper.AssertEqual(t, entries[len(entries)-1].Off, off)
+	testhelper.AssertEqual(t, entries[len(entries)-1].Pos, pos)
 }

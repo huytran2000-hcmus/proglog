@@ -1,7 +1,6 @@
 package log
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,10 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	log_v1 "github.com/huytran2000-hcmus/proglog/api/v1"
+	api "github.com/huytran2000-hcmus/proglog/api/v1"
 )
-
-var ErrNotFound = errors.New("offset out of range")
 
 type Log struct {
 	Config        Config
@@ -46,7 +43,7 @@ func NewLog(dir string, c Config) (*Log, error) {
 	return l, l.setup()
 }
 
-func (l *Log) Append(record *log_v1.Record) (uint64, error) {
+func (l *Log) Append(record *api.Record) (uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -62,7 +59,7 @@ func (l *Log) Append(record *log_v1.Record) (uint64, error) {
 	return off, nil
 }
 
-func (l *Log) Read(offset uint64) (*log_v1.Record, error) {
+func (l *Log) Read(offset uint64) (*api.Record, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -74,7 +71,7 @@ func (l *Log) Read(offset uint64) (*log_v1.Record, error) {
 	}
 
 	if s == nil {
-		return nil, ErrNotFound
+		return nil, api.OffsetOutOfRangeError{Offset: offset}
 	}
 
 	record, err := s.Read(offset)
@@ -173,9 +170,6 @@ func (l *Log) setup() error {
 }
 
 func (l *Log) Close() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	for _, s := range l.segments {
 		err := s.Close()
 		if err != nil {

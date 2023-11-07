@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	log_v1 "github.com/huytran2000-hcmus/proglog/api/v1"
+	api "github.com/huytran2000-hcmus/proglog/api/v1"
 )
 
 type segment struct {
@@ -64,7 +64,7 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	return s, nil
 }
 
-func (s *segment) Append(record *log_v1.Record) (offset uint64, err error) {
+func (s *segment) Append(record *api.Record) (offset uint64, err error) {
 	cur := s.nextOffset
 	record.Offset = cur
 	p, err := proto.Marshal(record)
@@ -89,7 +89,7 @@ func (s *segment) Append(record *log_v1.Record) (offset uint64, err error) {
 	return cur, nil
 }
 
-func (s *segment) Read(offset uint64) (*log_v1.Record, error) {
+func (s *segment) Read(offset uint64) (*api.Record, error) {
 	_, pos, err := s.index.Read(int64(offset - s.baseOffset))
 	if err != nil {
 		return nil, fmt.Errorf("read index: %w", err)
@@ -100,7 +100,7 @@ func (s *segment) Read(offset uint64) (*log_v1.Record, error) {
 		return nil, fmt.Errorf("read from store: %w", err)
 	}
 
-	var record log_v1.Record
+	var record api.Record
 	err = proto.Unmarshal(p, &record)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal protobuf")

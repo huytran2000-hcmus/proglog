@@ -3,6 +3,8 @@ package log
 import (
 	"os"
 	"testing"
+
+	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
 
 var (
@@ -70,7 +72,7 @@ func testStore_Append(t *testing.T, s *store, nLog int) {
 		if err != nil {
 			t.Errorf("unexpected error after append log: %s", err)
 		}
-		assertEqual(t, pos+n, width*i)
+		testhelper.AssertEqual(t, pos+n, width*i)
 	}
 }
 
@@ -81,7 +83,7 @@ func testStore_Read(t *testing.T, s *store, nLog int) {
 		if err != nil {
 			t.Errorf("unexpected error after read log: %s", err)
 		}
-		assertEqual(t, message, got)
+		testhelper.AssertEqual(t, message, got)
 		pos += width
 	}
 }
@@ -94,11 +96,11 @@ func testStore_ReadAt(t *testing.T, s *store, nLog int) {
 		if err != nil {
 			t.Errorf("unexpected error after read at offset %d: %s", offset, err)
 		}
-		assertEqual(t, lenWidth, n)
+		testhelper.AssertEqual(t, lenWidth, n)
 		offset += int64(n)
 
 		size := enc.Uint64(b)
-		assertEqual(t, len(message), int(size))
+		testhelper.AssertEqual(t, len(message), int(size))
 
 		b = make([]byte, size)
 		n, err = s.ReadAt(b, offset)
@@ -106,8 +108,8 @@ func testStore_ReadAt(t *testing.T, s *store, nLog int) {
 			t.Errorf("unexpected error after read at offset %d: %s", offset, err)
 		}
 
-		assertEqual(t, int(size), n)
-		assertEqual(t, message, b)
+		testhelper.AssertEqual(t, int(size), n)
+		testhelper.AssertEqual(t, message, b)
 		offset += int64(n)
 	}
 }

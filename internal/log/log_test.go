@@ -7,19 +7,20 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	log_v1 "github.com/huytran2000-hcmus/proglog/api/v1"
+	api "github.com/huytran2000-hcmus/proglog/api/v1"
+	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
 
 func TestLog(t *testing.T) {
 	createLog := func() *Log {
 		dir, err := os.MkdirTemp(os.TempDir(), "log-test")
-		assertNoError(t, err)
+		testhelper.AssertNoError(t, err)
 
 		var c Config
 		c.Segment.MaxStoreBytes = 32
 
 		log, err := NewLog(dir, c)
-		assertNoError(t, err)
+		testhelper.AssertNoError(t, err)
 
 		return log
 	}
@@ -50,94 +51,96 @@ func TestLog(t *testing.T) {
 }
 
 func testAppendReadLog(t *testing.T, log *Log) {
-	want := &log_v1.Record{
+	want := &api.Record{
 		Value: []byte("hello world"),
 	}
 
 	offset, err := log.Append(want)
-	assertNoError(t, err)
+	testhelper.AssertNoError(t, err)
 
 	got, err := log.Read(offset)
-	assertNoError(t, err)
-	assertEqual(t, want.Value, got.Value)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, want.Value, got.Value)
 }
 
 func testLogOutOfRange(t *testing.T, log *Log) {
 	_, err := log.Read(1000)
-	assertError(t, ErrNotFound, err)
+	outOfRangeErr := err.(api.OffsetOutOfRangeError)
+	testhelper.AssertEqual(t, uint64(1000), outOfRangeErr.Offset)
 }
 
 func testRecreateLog(t *testing.T, log *Log) {
 	n := 2
-	want := &log_v1.Record{
+	want := &api.Record{
 		Value: []byte("six figure job"),
 	}
 
 	for i := 0; i <= n; i++ {
 		_, err := log.Append(want)
-		assertNoError(t, err)
+		testhelper.AssertNoError(t, err)
 	}
 
 	offset, err := log.LowestOffset()
-	assertNoError(t, err)
-	assertEqual(t, uint64(0), offset)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, uint64(0), offset)
 
 	offset, err = log.HighestOffset()
-	assertNoError(t, err)
-	assertEqual(t, uint64(n), offset)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, uint64(n), offset)
 
 	err = log.Close()
-	assertNoError(t, err)
+	testhelper.AssertNoError(t, err)
 
 	log, err = NewLog(log.Dir, log.Config)
-	assertNoError(t, err)
+	testhelper.AssertNoError(t, err)
 
 	offset, err = log.LowestOffset()
-	assertNoError(t, err)
-	assertEqual(t, uint64(0), offset)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, uint64(0), offset)
 
 	offset, err = log.HighestOffset()
-	assertNoError(t, err)
-	assertEqual(t, uint64(n), offset)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, uint64(n), offset)
 }
 
 func testLogReader(t *testing.T, log *Log) {
-	want := &log_v1.Record{
+	want := &api.Record{
 		Value: []byte("six figure job"),
 	}
 
 	offset, err := log.Append(want)
-	assertNoError(t, err)
-	assertEqual(t, uint64(0), offset)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, uint64(0), offset)
 
 	got, err := log.Read(offset)
-	assertNoError(t, err)
-	assertEqual(t, want.Value, got.Value)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, want.Value, got.Value)
 
 	reader := log.Reader()
 	b, err := io.ReadAll(reader)
-	assertNoError(t, err)
+	testhelper.AssertNoError(t, err)
 
-	got = &log_v1.Record{}
+	got = &api.Record{}
 	err = proto.Unmarshal(b[lenWidth:], got)
-	assertNoError(t, err)
-	assertEqual(t, want.Value, got.Value)
+	testhelper.AssertNoError(t, err)
+	testhelper.AssertEqual(t, want.Value, got.Value)
 }
 
 func testTruncateLog(t *testing.T, log *Log) {
 	n := 2
-	want := &log_v1.Record{
+	want := &api.Record{
 		Value: []byte("six figure job"),
 	}
 
 	for i := 0; i <= n; i++ {
 		_, err := log.Append(want)
-		assertNoError(t, err)
+		testhelper.AssertNoError(t, err)
 	}
 
 	err := log.Truncate(1)
-	assertNoError(t, err)
+	testhelper.AssertNoError(t, err)
 
 	_, err = log.Read(0)
-	assertError(t, ErrNotFound, err)
+	outOfRangeErr := err.(api.OffsetOutOfRangeError)
+	testhelper.AssertEqual(t, uint64(0), outOfRangeErr.Offset)
 }

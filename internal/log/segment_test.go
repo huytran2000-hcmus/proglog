@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	log_v1 "github.com/huytran2000-hcmus/proglog/api/v1"
+	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
 
 func TestSegment(t *testing.T) {
@@ -30,35 +31,35 @@ func TestSegment(t *testing.T) {
 		t.Errorf("unexpected error when create segment: %s", err)
 	}
 
-	assertEqual(t, uint64(16), s.nextOffset)
-	assertEqual(t, false, s.IsMaxed())
+	testhelper.AssertEqual(t, uint64(16), s.nextOffset)
+	testhelper.AssertEqual(t, false, s.IsMaxed())
 
 	for i := uint64(0); i < n; i++ {
 		offset, err := s.Append(want)
-		assertEqual(t, nil, err)
+		testhelper.AssertEqual(t, nil, err)
 
-		assertEqual(t, 16+i, offset)
+		testhelper.AssertEqual(t, 16+i, offset)
 		got, err := s.Read(offset)
-		assertEqual(t, nil, err)
-		assertEqual(t, want.Value, got.Value)
+		testhelper.AssertEqual(t, nil, err)
+		testhelper.AssertEqual(t, want.Value, got.Value)
 	}
 
 	_, err = s.Append(want)
-	assertError(t, io.EOF, err)
+	testhelper.AssertError(t, io.EOF, err)
 
-	assertEqual(t, true, s.IsMaxed())
+	testhelper.AssertEqual(t, true, s.IsMaxed())
 
 	config.Segment.MaxIndexBytes = entryWidth * n
 	config.Segment.MaxStoreBytes = uint64(len(want.Value)) * 3
 	s, err = newSegment(dir, 16, config)
-	assertEqual(t, nil, err)
-	assertEqual(t, uint64(19), s.nextOffset)
-	assertEqual(t, true, s.IsMaxed())
+	testhelper.AssertEqual(t, nil, err)
+	testhelper.AssertEqual(t, uint64(19), s.nextOffset)
+	testhelper.AssertEqual(t, true, s.IsMaxed())
 
 	err = s.Remove()
-	assertEqual(t, nil, err)
+	testhelper.AssertEqual(t, nil, err)
 	s, err = newSegment(dir, 16, config)
-	assertEqual(t, nil, err)
-	assertEqual(t, uint64(16), s.nextOffset)
-	assertEqual(t, false, s.IsMaxed())
+	testhelper.AssertEqual(t, nil, err)
+	testhelper.AssertEqual(t, uint64(16), s.nextOffset)
+	testhelper.AssertEqual(t, false, s.IsMaxed())
 }
