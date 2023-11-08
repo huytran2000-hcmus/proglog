@@ -5,9 +5,21 @@ import (
 	"fmt"
 	"io"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 
 	api "github.com/huytran2000-hcmus/proglog/api/v1"
+)
+
+const (
+	produceAction  = "produce"
+	consumeAction  = "consume"
+	objectWildCard = "*"
 )
 
 type grpcServer struct {
@@ -16,7 +28,8 @@ type grpcServer struct {
 }
 
 type Config struct {
-	CommitLog CommitLog
+	CommitLog  CommitLog
+	Authorizer Authorizer
 }
 
 type CommitLog interface {
@@ -24,7 +37,25 @@ type CommitLog interface {
 	Read(uint64) (*api.Record, error)
 }
 
+type Authorizer interface {
+	Authorize(subject, object, acttion string) error
+}
+
+type subjectContextKey struct{}
+
 func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+	opts = append(opts,
+		grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				grpc_auth.StreamServerInterceptor(authenticate),
+			),
+		),
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				grpc_auth.UnaryServerInterceptor(authenticate),
+			),
+		),
+	)
 	grpcSrv := grpc.NewServer(opts...)
 	srv, err := newGRPCServer(config)
 	if err != nil {
@@ -43,6 +74,10 @@ func newGRPCServer(config *Config) (*grpcServer, error) {
 }
 
 func (s *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (*api.ProduceResponse, error) {
+	err := s.Authorizer.Authorize(subject(ctx), objectWildCard, produceAction)
+	if err != nil {
+		return nil, fmt.Errorf("failed authorization: %w", err)
+	}
 	offset, err := s.CommitLog.Append(req.Record)
 	if err != nil {
 		return nil, fmt.Errorf("produce a record: %w", err)
@@ -56,6 +91,10 @@ func (s *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (*api
 }
 
 func (s *grpcServer) Consume(ctx context.Context, req *api.ConsumeRequest) (*api.ConsumeResponse, error) {
+	err := s.Authorizer.Authorize(subject(ctx), objectWildCard, consumeAction)
+	if err != nil {
+		return nil, fmt.Errorf("failed authorization: %w", err)
+	}
 	record, err := s.CommitLog.Read(req.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("read a record: %w", err)
@@ -116,4 +155,25 @@ func (s *grpcServer) ConsumeStream(req *api.ConsumeRequest, stream api.Log_Consu
 			req.Offset++
 		}
 	}
+}
+
+func authenticate(ctx context.Context) (context.Context, error) {
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return ctx, status.New(codes.Unknown, "couldn't find peer error").Err()
+	}
+
+	if peer.AuthInfo == nil {
+		return context.WithValue(ctx, subjectContextKey{}, ""), nil
+	}
+
+	tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+	subject := tlsInfo.State.VerifiedChains[0][0].Subject.CommonName
+	ctx = context.WithValue(ctx, subjectContextKey{}, subject)
+
+	return ctx, nil
+}
+
+func subject(ctx context.Context) string {
+	return ctx.Value(subjectContextKey{}).(string)
 }

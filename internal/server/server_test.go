@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	api "github.com/huytran2000-hcmus/proglog/api/v1"
+	"github.com/huytran2000-hcmus/proglog/internal/auth"
 	"github.com/huytran2000-hcmus/proglog/internal/config"
 	"github.com/huytran2000-hcmus/proglog/internal/log"
 	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
@@ -18,21 +20,27 @@ import (
 
 func TestGRPCServer(t *testing.T) {
 	t.Run("produce and consume", func(t *testing.T) {
-		client, cancel := setupServer(t)
-		defer cancel()
-		testProduceConsume(t, client)
+		rootClient, _, teardown := setupServer(t)
+		defer teardown()
+		testProduceConsume(t, rootClient)
 	})
 
 	t.Run("consume past boundary", func(t *testing.T) {
-		client, cancel := setupServer(t)
-		defer cancel()
-		testConsumePastBoundary(t, client)
+		rootClient, _, teardown := setupServer(t)
+		defer teardown()
+		testConsumePastBoundary(t, rootClient)
 	})
 
 	t.Run("produce and consume stream", func(t *testing.T) {
-		client, cancel := setupServer(t)
-		defer cancel()
-		testProduceConsumeStream(t, client)
+		rootClient, _, teardown := setupServer(t)
+		defer teardown()
+		testProduceConsumeStream(t, rootClient)
+	})
+
+	t.Run("unauthorized client", func(t *testing.T) {
+		_, nobodyClient, teardown := setupServer(t)
+		defer teardown()
+		testAuthorization(t, nobodyClient)
 	})
 }
 
@@ -81,33 +89,25 @@ func testConsumePastBoundary(t *testing.T, client api.LogClient) {
 	testhelper.AssertEqual(t, wantCode, gotCode)
 }
 
-func setupServer(t *testing.T) (client api.LogClient, cancel func()) {
+func setupServer(t *testing.T) (rootClient api.LogClient, nobodyClient api.LogClient, teardown func()) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	testhelper.AssertNoError(t, err)
 
-	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
-		CertFile: config.ClientCertFile,
-		KeyFile:  config.ClientKeyFile,
-		CAFile:   config.CAFile,
-	})
+	rootClient, rootClientConn, err := setupClient(t, config.RootClientCertFile, config.RootClientKeyFile, l.Addr().String())
 	testhelper.AssertNoError(t, err)
 
-	clientCreds := credentials.NewTLS(clientTLSConfig)
-
-	clientOpt := grpc.WithTransportCredentials(clientCreds)
-	conn, err := grpc.Dial(l.Addr().String(), clientOpt)
+	nobodyClient, nobodyClientConn, err := setupClient(t, config.NobodyClientCertFile, config.NobodyClientKeyFile, l.Addr().String())
 	testhelper.AssertNoError(t, err)
-
-	client = api.NewLogClient(conn)
 
 	dir, err := os.MkdirTemp(os.TempDir(), "server-test")
 	testhelper.AssertNoError(t, err)
 
 	log, err := log.NewLog(dir, log.Config{})
 	testhelper.AssertNoError(t, err)
-
+	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
 	cfg := &Config{
-		CommitLog: log,
+		CommitLog:  log,
+		Authorizer: authorizer,
 	}
 
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
@@ -127,8 +127,9 @@ func setupServer(t *testing.T) (client api.LogClient, cancel func()) {
 		_ = server.Serve(l)
 	}()
 
-	return client, func() {
-		conn.Close()
+	return rootClient, nobodyClient, func() {
+		rootClientConn.Close()
+		nobodyClientConn.Close()
 		server.Stop()
 		l.Close()
 		_ = log.Remove()
@@ -176,4 +177,47 @@ func testProduceConsumeStream(t *testing.T, client api.LogClient) {
 			testhelper.AssertEqual(t, record.Value, resp.Record.Value)
 		}
 	}
+}
+
+func setupClient(t *testing.T, certPath, keyPath, address string) (api.LogClient, *grpc.ClientConn, error) {
+	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+		CertFile: certPath,
+		KeyFile:  keyPath,
+		CAFile:   config.CAFile,
+		IsServer: false,
+	})
+	testhelper.AssertNoError(t, err)
+
+	clientCreds := credentials.NewTLS(clientTLSConfig)
+
+	clientOpt := grpc.WithTransportCredentials(clientCreds)
+	conn, err := grpc.Dial(address, clientOpt)
+	testhelper.AssertNoError(t, err)
+
+	client := api.NewLogClient(conn)
+
+	return client, conn, err
+}
+
+func testAuthorization(t *testing.T, nobodyClient api.LogClient) {
+	produceReq := &api.ProduceRequest{
+		Record: &api.Record{
+			Value:  []byte("hello-world"),
+			Offset: 0,
+		},
+	}
+
+	ctx := context.Background()
+	_, err := nobodyClient.Produce(ctx, produceReq)
+	wantCode := codes.PermissionDenied
+	gotCode := status.Code(err)
+	testhelper.AssertEqual(t, wantCode, gotCode)
+
+	consumeReq := &api.ConsumeRequest{
+		Offset: 0,
+	}
+	_, err = nobodyClient.Consume(ctx, consumeReq)
+	wantCode = codes.PermissionDenied
+	gotCode = status.Code(err)
+	testhelper.AssertEqual(t, wantCode, gotCode)
 }
