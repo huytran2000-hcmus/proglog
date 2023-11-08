@@ -32,6 +32,6 @@ func AssertError(t testing.TB, want, got error) {
 func AssertNoError(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
-		t.Errorf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %s", err)
 	}
 }

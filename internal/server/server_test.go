@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	api "github.com/huytran2000-hcmus/proglog/api/v1"
+	"github.com/huytran2000-hcmus/proglog/internal/config"
 	"github.com/huytran2000-hcmus/proglog/internal/log"
 	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
@@ -81,12 +82,23 @@ func testConsumePastBoundary(t *testing.T, client api.LogClient) {
 }
 
 func setupServer(t *testing.T) (client api.LogClient, cancel func()) {
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	testhelper.AssertNoError(t, err)
 
-	clientOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	conn, err := grpc.Dial(l.Addr().String(), clientOpts...)
+	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+		CertFile: config.ClientCertFile,
+		KeyFile:  config.ClientKeyFile,
+		CAFile:   config.CAFile,
+	})
 	testhelper.AssertNoError(t, err)
+
+	clientCreds := credentials.NewTLS(clientTLSConfig)
+
+	clientOpt := grpc.WithTransportCredentials(clientCreds)
+	conn, err := grpc.Dial(l.Addr().String(), clientOpt)
+	testhelper.AssertNoError(t, err)
+
+	client = api.NewLogClient(conn)
 
 	dir, err := os.MkdirTemp(os.TempDir(), "server-test")
 	testhelper.AssertNoError(t, err)
@@ -98,14 +110,22 @@ func setupServer(t *testing.T) (client api.LogClient, cancel func()) {
 		CommitLog: log,
 	}
 
-	server, err := NewGRPCServer(cfg)
+	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+		CertFile:      config.ServerCertFile,
+		KeyFile:       config.ServerKeyFile,
+		CAFile:        config.CAFile,
+		ServerAddress: l.Addr().String(),
+		IsServer:      true,
+	})
+	testhelper.AssertNoError(t, err)
+
+	serverCreds := credentials.NewTLS(serverTLSConfig)
+	server, err := NewGRPCServer(cfg, grpc.Creds(serverCreds))
 	testhelper.AssertNoError(t, err)
 
 	go func() {
 		_ = server.Serve(l)
 	}()
-
-	client = api.NewLogClient(conn)
 
 	return client, func() {
 		conn.Close()
