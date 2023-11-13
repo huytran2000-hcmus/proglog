@@ -7,6 +7,10 @@ import (
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -20,6 +24,10 @@ const (
 	produceAction  = "produce"
 	consumeAction  = "consume"
 	objectWildCard = "*"
+)
+
+const (
+	serverName = "proglog"
 )
 
 type grpcServer struct {
@@ -44,18 +52,31 @@ type Authorizer interface {
 type subjectContextKey struct{}
 
 func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+	logger := zap.L().Named(serverName)
+	// grpc_zap.ReplaceGrpcLoggerV2(logger)
+
+	zapOpts := []grpc_zap.Option{
+		grpc_zap.WithDurationField(grpc_zap.DurationToTimeMillisField),
+	}
+
 	opts = append(opts,
 		grpc.StreamInterceptor(
 			grpc_middleware.ChainStreamServer(
+				grpc_ctxtags.StreamServerInterceptor(),
+				grpc_zap.StreamServerInterceptor(logger, zapOpts...),
 				grpc_auth.StreamServerInterceptor(authenticate),
 			),
 		),
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
+				grpc_ctxtags.UnaryServerInterceptor(),
+				grpc_zap.UnaryServerInterceptor(logger, zapOpts...),
 				grpc_auth.UnaryServerInterceptor(authenticate),
 			),
 		),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
+
 	grpcSrv := grpc.NewServer(opts...)
 	srv, err := newGRPCServer(config)
 	if err != nil {

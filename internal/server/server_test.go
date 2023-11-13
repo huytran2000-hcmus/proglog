@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"flag"
 	"net"
 	"os"
 	"testing"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -17,6 +19,21 @@ import (
 	"github.com/huytran2000-hcmus/proglog/internal/log"
 	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
+
+var otelTrace = flag.Bool("otel_trace", false, "Enable observability for debugging")
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	if *otelTrace {
+		logger, err := newLogger(Developemnt, serverName, Debug)
+		if err != nil {
+			panic(err)
+		}
+		zap.ReplaceGlobals(logger)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestGRPCServer(t *testing.T) {
 	t.Run("produce and consume", func(t *testing.T) {
@@ -104,7 +121,15 @@ func setupServer(t *testing.T) (rootClient api.LogClient, nobodyClient api.LogCl
 
 	log, err := log.NewLog(dir, log.Config{})
 	testhelper.AssertNoError(t, err)
+
 	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
+
+	var shutdownOtel func(context.Context) error
+	if otelTrace != nil && *otelTrace {
+		shutdownOtel, err = InitOtel(context.Background())
+		testhelper.AssertNoError(t, err)
+	}
+
 	cfg := &Config{
 		CommitLog:  log,
 		Authorizer: authorizer,
@@ -132,8 +157,12 @@ func setupServer(t *testing.T) (rootClient api.LogClient, nobodyClient api.LogCl
 		nobodyClientConn.Close()
 		server.Stop()
 		l.Close()
-		_ = log.Remove()
+		log.Remove()
 		os.Remove(dir)
+
+		if shutdownOtel != nil {
+			shutdownOtel(context.Background())
+		}
 	}
 }
 
