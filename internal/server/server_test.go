@@ -119,7 +119,7 @@ func setupServer(t *testing.T) (rootClient api.LogClient, nobodyClient api.LogCl
 	dir, err := os.MkdirTemp(os.TempDir(), "server-test")
 	testhelper.AssertNoError(t, err)
 
-	log, err := log.NewLog(dir, log.Config{})
+	log, err := log.New(dir, log.Config{})
 	testhelper.AssertNoError(t, err)
 
 	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)

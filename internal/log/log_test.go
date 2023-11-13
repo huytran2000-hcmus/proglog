@@ -19,7 +19,7 @@ func TestLog(t *testing.T) {
 		var c Config
 		c.Segment.MaxStoreBytes = 32
 
-		log, err := NewLog(dir, c)
+		log, err := New(dir, c)
 		testhelper.AssertNoError(t, err)
 
 		return log
@@ -91,7 +91,7 @@ func testRecreateLog(t *testing.T, log *Log) {
 	err = log.Close()
 	testhelper.AssertNoError(t, err)
 
-	log, err = NewLog(log.Dir, log.Config)
+	log, err = New(log.Dir, log.Config)
 	testhelper.AssertNoError(t, err)
 
 	offset, err = log.LowestOffset()

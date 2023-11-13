@@ -116,9 +116,10 @@ func (s *grpcServer) Consume(ctx context.Context, req *api.ConsumeRequest) (*api
 	if err != nil {
 		return nil, fmt.Errorf("failed authorization: %w", err)
 	}
+
 	record, err := s.CommitLog.Read(req.Offset)
 	if err != nil {
-		return nil, fmt.Errorf("read a record: %w", err)
+		return nil, err
 	}
 
 	resp := &api.ConsumeResponse{

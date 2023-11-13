@@ -26,13 +26,13 @@ type originReader struct {
 	offset int64
 }
 
-func NewLog(dir string, c Config) (*Log, error) {
+func New(dir string, c Config) (*Log, error) {
 	if c.Segment.MaxStoreBytes == 0 {
-		c.Segment.MaxStoreBytes = 1024
+		c.Segment.MaxStoreBytes = 10000
 	}
 
 	if c.Segment.MaxIndexBytes == 0 {
-		c.Segment.MaxIndexBytes = 1024
+		c.Segment.MaxIndexBytes = 10000
 	}
 
 	l := &Log{
@@ -56,7 +56,7 @@ func (l *Log) Append(record *api.Record) (uint64, error) {
 		err = l.newSegment(off + 1)
 	}
 
-	return off, nil
+	return off, err
 }
 
 func (l *Log) Read(offset uint64) (*api.Record, error) {
