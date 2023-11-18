@@ -35,3 +35,10 @@ func AssertNoError(t testing.TB, err error) {
 		t.Errorf("unexpected error: %s", err)
 	}
 }
+
+func RequireNoError(t testing.TB, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}

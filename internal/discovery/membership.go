@@ -1,9 +1,11 @@
 package discovery
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
+	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 	"go.uber.org/zap"
 )
@@ -135,7 +137,12 @@ func (ms *Membership) isLocal(member serf.Member) bool {
 }
 
 func (ms *Membership) logError(err error, msg string, member serf.Member) {
-	ms.logger.Error(
+	log := ms.logger.Error
+	if errors.Is(err, raft.ErrNotLeader) {
+		log = ms.logger.Debug
+	}
+
+	log(
 		msg,
 		zap.Error(err),
 		zap.String("name", member.Name),

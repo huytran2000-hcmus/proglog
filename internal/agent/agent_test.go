@@ -11,6 +11,7 @@ import (
 	"github.com/travisjeffery/go-dynaport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 
 	api "github.com/huytran2000-hcmus/proglog/api/v1"
 	"github.com/huytran2000-hcmus/proglog/internal/agent"
@@ -52,11 +53,12 @@ func TestAgent(t *testing.T) {
 		}
 
 		agent, err := agent.New(agent.Config{
+			Bootstrap:       i == 0,
 			DataDir:         dir,
 			MaxStoreBytes:   0,
 			MaxIndexBytes:   0,
-			ServerTLS:       serverTLSCfg,
-			PeerTLS:         peerTLSCfg,
+			ServerTLSConfig: serverTLSCfg,
+			PeerTLSConfig:   peerTLSCfg,
 			BindAddr:        bindAddr,
 			RPCPort:         rpcPort,
 			NodeName:        fmt.Sprint(i),
@@ -65,7 +67,7 @@ func TestAgent(t *testing.T) {
 			ACLPolicyFile:   config.ACLPolicyFile,
 		},
 		)
-		testhelper.AssertNoError(t, err)
+		testhelper.RequireNoError(t, err)
 
 		agents = append(agents, agent)
 	}
@@ -89,24 +91,24 @@ func TestAgent(t *testing.T) {
 			},
 		},
 	)
-	testhelper.AssertNoError(t, err)
+	testhelper.RequireNoError(t, err)
 
 	consume, err := leaderClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset})
-	testhelper.AssertNoError(t, err)
+	testhelper.RequireNoError(t, err)
 	testhelper.AssertEqual(t, want, consume.Record.Value)
-
-	// consume, err = leaderClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset + 1})
-	// testhelper.AssertEqual(t, (*api.ConsumeResponse)(nil), consume)
-	// gotErr := status.Code(err)
-	// wantErr := status.Code(api.OffsetOutOfRangeError{}.GRPCStatus().Err())
-	// testhelper.AssertEqual(t, wantErr, gotErr)
 
 	time.Sleep(2 * time.Second)
 
 	followerClient := client(t, agents[1], peerTLSCfg)
 	consume, err = followerClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset})
-	testhelper.AssertNoError(t, err)
+	testhelper.RequireNoError(t, err)
 	testhelper.AssertEqual(t, want, consume.Record.Value)
+
+	consume, err = leaderClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset + 1})
+	testhelper.AssertEqual(t, (*api.ConsumeResponse)(nil), consume)
+	gotErr := status.Code(err)
+	wantErr := status.Code(api.OffsetOutOfRangeError{}.GRPCStatus().Err())
+	testhelper.AssertEqual(t, wantErr, gotErr)
 }
 
 func client(t *testing.T, agent *agent.Agent, tlsConfig *tls.Config) api.LogClient {

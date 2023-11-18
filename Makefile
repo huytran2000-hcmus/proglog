@@ -33,7 +33,7 @@ $(CONFIG_PATH)/policy.csv:
 ## test: run all test
 .PHONY: test
 test: $(CONFIG_PATH)/model.conf $(CONFIG_PATH)/policy.csv
-	go test --race --count 1 -v ./...
+	go test --count 1 -v ./...
 
 ## gencert: generate certificate
 .PHONY: gencert

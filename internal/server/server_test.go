@@ -32,7 +32,8 @@ func TestMain(m *testing.M) {
 		zap.ReplaceGlobals(logger)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.Exit(code)
 }
 
 func TestGRPCServer(t *testing.T) {
