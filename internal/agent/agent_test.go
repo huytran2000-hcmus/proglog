@@ -16,6 +16,7 @@ import (
 	api "github.com/huytran2000-hcmus/proglog/api/v1"
 	"github.com/huytran2000-hcmus/proglog/internal/agent"
 	"github.com/huytran2000-hcmus/proglog/internal/config"
+	"github.com/huytran2000-hcmus/proglog/internal/loadbalance"
 	"github.com/huytran2000-hcmus/proglog/pkg/testhelper"
 )
 
@@ -92,12 +93,11 @@ func TestAgent(t *testing.T) {
 		},
 	)
 	testhelper.RequireNoError(t, err)
+	time.Sleep(1 * time.Second)
 
 	consume, err := leaderClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset})
 	testhelper.RequireNoError(t, err)
 	testhelper.AssertEqual(t, want, consume.Record.Value)
-
-	time.Sleep(2 * time.Second)
 
 	followerClient := client(t, agents[1], peerTLSCfg)
 	consume, err = followerClient.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset})
@@ -117,7 +117,7 @@ func client(t *testing.T, agent *agent.Agent, tlsConfig *tls.Config) api.LogClie
 	rpcAddr, err := agent.RPCAddr()
 	testhelper.AssertNoError(t, err)
 
-	conn, err := grpc.Dial(rpcAddr, opts...)
+	conn, err := grpc.Dial(fmt.Sprintf("%s://%s", loadbalance.Name, rpcAddr), opts...)
 	testhelper.AssertNoError(t, err)
 
 	client := api.NewLogClient(conn)

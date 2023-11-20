@@ -25,7 +25,6 @@ func TestMultipleNode(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		dataDir, err := os.MkdirTemp(os.TempDir(), fmt.Sprintf("distributed-log-test-%d", i))
-		t.Logf("%d: %s", i, dataDir)
 		testhelper.AssertNoError(t, err)
 
 		defer func(dir string) {
@@ -94,10 +93,23 @@ func TestMultipleNode(t *testing.T) {
 		}, 5*time.Second, 50*time.Millisecond)
 	}
 
-	err := logs[0].Leave("1")
+	servers, err := logs[0].GetServers()
+	testhelper.RequireNoError(t, err)
+	testhelper.AssertEqual(t, 3, len(servers))
+	testhelper.AssertEqual(t, true, servers[0].IsLeader)
+	testhelper.AssertEqual(t, false, servers[1].IsLeader)
+	testhelper.AssertEqual(t, false, servers[2].IsLeader)
+
+	err = logs[0].Leave("1")
 	testhelper.AssertNoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
+
+	servers, err = logs[0].GetServers()
+	testhelper.RequireNoError(t, err)
+	testhelper.AssertEqual(t, 2, len(servers))
+	testhelper.AssertEqual(t, true, servers[0].IsLeader)
+	testhelper.AssertEqual(t, false, servers[1].IsLeader)
 
 	off, err := logs[0].Append(&api.Record{
 		Value: []byte("third"),

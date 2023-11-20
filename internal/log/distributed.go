@@ -104,6 +104,26 @@ func (l *Distributed) setupLog(dataDir string) error {
 	return err
 }
 
+func (l *Distributed) GetServers() ([]*api.Server, error) {
+	future := l.raft.GetConfiguration()
+	err := future.Error()
+	if err != nil {
+		return nil, err
+	}
+
+	var servers []*api.Server
+	leader, _ := l.raft.LeaderWithID()
+	for _, srv := range future.Configuration().Servers {
+		servers = append(servers, &api.Server{
+			Id:       string(srv.ID),
+			RpcAddr:  string(srv.Address),
+			IsLeader: leader == srv.Address,
+		})
+	}
+
+	return servers, nil
+}
+
 func (l *Distributed) WaitForLeader(timeout time.Duration) error {
 	timeoutC := time.After(timeout)
 	ticker := time.NewTicker(time.Second)
