@@ -131,7 +131,7 @@ func (l *Distributed) WaitForLeader(timeout time.Duration) error {
 	for {
 		select {
 		case <-timeoutC:
-			return fmt.Errorf("timed out")
+			return fmt.Errorf("timed out while wait for leader")
 		case <-ticker.C:
 			leader, _ := l.raft.LeaderWithID()
 			if leader != "" {
@@ -160,7 +160,6 @@ func (l *Distributed) setupRaft(dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("create raft log dir: %w", err)
 	}
-
 	logConfig := l.cfg
 	logConfig.Segment.InitialOffset = 1
 	logStore, err := newLogStore(logDir, logConfig)
@@ -231,7 +230,7 @@ func (l *Distributed) setupRaft(dataDir string) error {
 			Servers: []raft.Server{
 				{
 					ID:      config.LocalID,
-					Address: transport.LocalAddr(),
+					Address: raft.ServerAddress(l.cfg.Raft.BindAddr),
 				},
 			},
 		}

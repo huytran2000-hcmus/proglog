@@ -61,3 +61,10 @@ gencert:
 		-cn="nobody" \
 		testdata/client-csr.json | cfssljson -bare nobody-client
 	mv *.pem *.csr ${CONFIG_PATH}
+
+TAG ?= 0.0.1
+build-docker:
+	docker build -t github.com/huytran2000-hcmus/proglog:$(TAG) --build-arg "APP_VERSION=$(TAG)" .
+
+build-binaries:
+	docker buildx build

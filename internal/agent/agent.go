@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	glog "log"
 	"net"
 	"sync"
 	"time"
@@ -61,17 +62,21 @@ func New(config Config) (*Agent, error) {
 		shutdowns: make(chan struct{}),
 	}
 
-	for _, fn := range []func() error{
-		// "logger": a.setupLogger,
-		a.setupMux,
-		a.setupLog,
-		a.setupServer,
-		a.setupMembership,
-	} {
-		err := fn()
-		if err != nil {
-			return nil, fmt.Errorf("setup: %w", err)
-		}
+	err := a.setupMux()
+	if err != nil {
+		return nil, fmt.Errorf("setup mux: %w", err)
+	}
+	err = a.setupLog()
+	if err != nil {
+		return nil, fmt.Errorf("setup log: %w", err)
+	}
+	err = a.setupServer()
+	if err != nil {
+		return nil, fmt.Errorf("setup server: %w", err)
+	}
+	err = a.setupMembership()
+	if err != nil {
+		return nil, fmt.Errorf("setup membership: %w", err)
 	}
 
 	go a.serve()
@@ -177,31 +182,38 @@ func (a *Agent) setupLog() error {
 
 		return bytes.Compare(b, []byte{byte(log.RaftRPC)}) == 0
 	})
-
 	logConfig := log.Config{}
 	logConfig.Raft.Stream = log.NewStreamLayer(raftLn, a.ServerTLSConfig, a.PeerTLSConfig)
+	rpcAddr, err := a.Config.RPCAddr()
+	if err != nil {
+		return err
+	}
+	logConfig.Raft.BindAddr = rpcAddr
 	logConfig.Raft.LocalID = raft.ServerID(a.NodeName)
 	logConfig.Raft.Bootstrap = a.Bootstrap
 
-	var err error
 	a.log, err = log.NewDistributed(a.DataDir, logConfig)
 	if err != nil {
 		return err
 	}
 
 	if a.Bootstrap {
-		err = a.log.WaitForLeader(3 * time.Second)
+		err = a.log.WaitForLeader(5 * time.Second)
 	}
 
 	return err
 }
 
 func (a *Agent) setupMux() error {
-	rpcAddr := fmt.Sprintf(":%d", a.RPCPort)
+	addr, err := net.ResolveTCPAddr("tcp", a.BindAddr)
+	if err != nil {
+		return fmt.Errorf("resolve tcp addr: %w", err)
+	}
+	rpcAddr := fmt.Sprintf("%s:%d", addr.IP.String(), a.RPCPort)
 
 	ln, err := net.Listen("tcp", rpcAddr)
 	if err != nil {
-		return err
+		return fmt.Errorf("listen on address %s: %w", rpcAddr, err)
 	}
 	a.mux = cmux.New(ln)
 
@@ -222,7 +234,7 @@ func (a *Agent) serve() error {
 	err := a.mux.Serve()
 	if err != nil {
 		anotherErr := a.Shutdown()
-		return fmt.Errorf("gay%w: %w", anotherErr, err)
+		glog.Printf("%s: %s\n", anotherErr, err)
 	}
 
 	return nil

@@ -1,2 +1,2 @@
 # proglog
-Simple JSON over HTTP commit log service
+Distributed GRPC commit log service
